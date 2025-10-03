@@ -91,32 +91,17 @@ class _AddExpenseState extends State<AddExpense> {
           ),
         ],
       ),
-        body: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            16,
-            16,
-            16,
-            MediaQuery.of(context).viewInsets.bottom + 16,
-          ),
-          child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Row(
-            children: [
-              Text(
-                'Add New Expense',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const Spacer(),
-              IconButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                },
-                icon: const Icon(Icons.close),
-              ),
-            ],
-          ),
+      body: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          16,
+          16,
+          MediaQuery.of(context).viewInsets.bottom + 16,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
           const SizedBox(height: 16),
           TextField(
             controller: _titleController,
@@ -174,8 +159,8 @@ class _AddExpenseState extends State<AddExpense> {
                         child: Row(
                           children: [
                             Icon(
-                              categoryIcons[category],
-                              color: categoryColors[category],
+                              category.icon,
+                              color: category.color,
                             ),
                             const SizedBox(width: 8),
                             Text(category.name.toUpperCase()),
@@ -214,17 +199,3 @@ class _AddExpenseState extends State<AddExpense> {
 }
 
 final formatter = DateFormat('dd/MM/yyyy');
-final categoryIcons = {
-  Category.food: Icons.restaurant,
-  Category.travel: Icons.flight,
-  Category.leisure: Icons.movie,
-  Category.work: Icons.work,
-};
-
-final categoryColors = {
-  Category.food: Colors.orange,
-  Category.travel: Colors.blue,
-  Category.leisure: Colors.purple,
-  Category.work: Colors.green,
-};
-
