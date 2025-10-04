@@ -44,6 +44,7 @@ class _ExpensesState extends State<Expenses> {
 
   void _openAddExpenseOverlay() {
     showModalBottomSheet(
+      useSafeArea: true,
       isScrollControlled: true,
       context: context,
       builder: (ctx) => AddExpense(onAddExpense: _addExpense),
@@ -123,6 +124,7 @@ class _ExpensesState extends State<Expenses> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final width = MediaQuery.of(context).size.width;
     
     return Scaffold(
       appBar: AppBar(
@@ -150,7 +152,8 @@ class _ExpensesState extends State<Expenses> {
           ),
         ],
       ),
-      body: Column(
+      body: 
+      width < 600 ? Column(
         children: [
           // Integrated Expenses Summary with Chart
           ExpensesSummary(expenses: _registeredExpenses),
@@ -161,7 +164,21 @@ class _ExpensesState extends State<Expenses> {
             ),
           ),
         ],
-      ),
+      ) 
+      : Row(
+        children: [
+              Expanded(
+                child: ExpensesSummary(expenses: _registeredExpenses),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: ExpensesList(
+                  expenses: _registeredExpenses,
+                  onRemoveExpense: _removeExpense,
+                ),
+              ),
+            ],
+          ),
     );
   }
 }
