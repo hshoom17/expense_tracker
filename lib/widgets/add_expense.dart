@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:expense_tracker/models/expense.dart';
+import 'package:expense_tracker/providers/expense_provider.dart';
 import 'package:intl/intl.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:expense_tracker/utils/constants.dart';
 
 class AddExpense extends StatefulWidget {
-  const AddExpense({super.key, required this.onAddExpense});
-
-  final void Function(Expense expense, String? firebaseId) onAddExpense;
+  const AddExpense({super.key});
 
   @override
   State<AddExpense> createState() => _AddExpenseState();
@@ -38,89 +37,39 @@ class _AddExpenseState extends State<AddExpense> {
   void _submitExpenseData() async {
     // Validate the form
     if (!_formKey.currentState!.validate()) {
-      return; // Exit if validation fails
+      return;
     }
-    
-    // Date is always set to current date by default, so no need to check for null
 
     try {
-      final url = Uri.https(
-        'flutter-aaad7-default-rtdb.firebaseio.com',
-        'expenses.json',
+      // Create expense object
+      final expense = Expense(
+        title: _titleController.text.trim(),
+        amount: double.parse(_amountController.text),
+        date: _selectedDate,
+        category: _selectedCategory,
       );
 
-      final expenseData = {
-        'title': _titleController.text.trim(),
-        'amount': double.tryParse(_amountController.text) ?? 0.0,
-        'date': _selectedDate.toIso8601String(),
-        'category': _selectedCategory.name,
-      };
+      // Add expense through provider (handles Firebase sync)
+      await context.read<ExpenseProvider>().addExpense(expense);
 
-      final response = await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: json.encode(expenseData),
-      );
-
-      if (response.statusCode == 200) {
-        // Success - show success message
+      // Show success message
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Expense saved successfully!')),
         );
-        
-        // Get Firebase ID from response
-        final responseData = json.decode(response.body);
-        final firebaseId = responseData['name']; // Firebase returns generated ID as 'name'
-        
-        // Save the expense locally as well using Firebase ID
-        widget.onAddExpense(
-          Expense.fromFirebase(
-            id: firebaseId,
-            title: _titleController.text.trim(),
-            amount: double.parse(_amountController.text),
-            date: _selectedDate,
-            category: _selectedCategory,
-          ),
-          firebaseId,
-        );
-      } else {
-        // Error - show error message
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving expense: ${response.statusCode}')),
-        );
-        
-        // Save locally without Firebase ID on error
-        widget.onAddExpense(
-          Expense(
-            title: _titleController.text.trim(),
-            amount: double.parse(_amountController.text),
-            date: _selectedDate,
-            category: _selectedCategory,
-          ),
-          null,
-        );
       }
     } catch (e) {
-      // Network or other error
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error saving expense: $e')),
-      );
-      
-      // Save locally without Firebase ID on error
-      widget.onAddExpense(
-        Expense(
-          title: _titleController.text.trim(),
-          amount: double.parse(_amountController.text),
-          date: _selectedDate,
-          category: _selectedCategory,
-        ),
-        null,
-      );
+      // Show error message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error saving expense: $e')),
+        );
+      }
     }
     
-    Navigator.pop(context);
+    if (mounted) {
+      Navigator.pop(context);
+    }
   }
 
   @override
@@ -146,10 +95,10 @@ class _AddExpenseState extends State<AddExpense> {
       ),
       body: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
-          16,
-          16,
-          16,
-          MediaQuery.of(context).viewInsets.bottom + 16,
+          AppConstants.defaultPadding,
+          AppConstants.defaultPadding,
+          AppConstants.defaultPadding,
+          MediaQuery.of(context).viewInsets.bottom + AppConstants.defaultPadding,
         ),
         child: Form(
           key: _formKey,
@@ -157,10 +106,10 @@ class _AddExpenseState extends State<AddExpense> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              const SizedBox(height: 16),
+              const SizedBox(height: AppConstants.defaultPadding),
               TextFormField(
                 controller: _titleController,
-                maxLength: 50,
+                maxLength: AppConstants.maxTitleLength,
                 decoration: const InputDecoration(
                   label: Text('Title'),
                   border: OutlineInputBorder(),
@@ -172,7 +121,7 @@ class _AddExpenseState extends State<AddExpense> {
                   return null;
                 },
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppConstants.defaultPadding),
               Row(
                 children: [
                   Expanded(
@@ -189,83 +138,81 @@ class _AddExpenseState extends State<AddExpense> {
                           return 'Please enter an amount';
                         }
                         final amount = double.tryParse(value);
-                        if (amount == null || amount <= 0) {
+                        if (amount == null || amount < AppConstants.minAmount) {
                           return 'Please enter a valid amount';
                         }
                         return null;
                       },
                     ),
                   ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(
-                      formatter.format(_selectedDate),
-                    ),
-                    IconButton(
-                      onPressed: _presentDatePicker,
-                      icon: const Icon(
-                        Icons.calendar_month,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              DropdownButton(
-                value: _selectedCategory,
-                items: Category.values
-                    .map(
-                      (category) => DropdownMenuItem(
-                        value: category,
-                        child: Row(
-                          children: [
-                            Icon(
-                              category.icon,
-                              color: category.color,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(category.name.toUpperCase()),
-                          ],
+                  const SizedBox(width: AppConstants.defaultPadding),
+                  Expanded(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Text(
+                          DateFormat(AppConstants.dateFormat).format(_selectedDate),
                         ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() {
-                      _selectedCategory = value;
-                    });
-                  }
-                },
+                        IconButton(
+                          onPressed: _presentDatePicker,
+                          icon: const Icon(
+                            Icons.calendar_month,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              const Spacer(),
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                },
-                child: const Text('Cancel'),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton(
-                onPressed: _submitExpenseData,
-                child: const Text('Save Expense'),
+              const SizedBox(height: AppConstants.defaultPadding),
+              Row(
+                children: [
+                  DropdownButton(
+                    value: _selectedCategory,
+                    items: Category.values
+                        .map(
+                          (category) => DropdownMenuItem(
+                            value: category,
+                            child: Row(
+                              children: [
+                                Icon(
+                                  category.icon,
+                                  color: category.color,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(category.name.toUpperCase()),
+                              ],
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() {
+                          _selectedCategory = value;
+                        });
+                      }
+                    },
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                    },
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: _submitExpenseData,
+                    child: const Text('Save Expense'),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
         ),
       ),
-    ),
     );
   }
 }
-
-final formatter = DateFormat('dd/MM/yyyy');
