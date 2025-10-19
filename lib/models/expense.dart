@@ -19,6 +19,14 @@ class Expense {
     required this.category,
   }) : id = uuid.v4();
 
+  Expense.fromFirebase({
+    required this.id,
+    required this.title,
+    required this.amount,
+    required this.date,
+    required this.category,
+  });
+
   final String id;
   final String title;
   final double amount;

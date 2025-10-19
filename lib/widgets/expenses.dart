@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:expense_tracker/models/expense.dart';
 import 'package:expense_tracker/providers/theme_provider.dart';
+import 'package:expense_tracker/providers/expense_provider.dart';
 import 'package:expense_tracker/widgets/expenses_list/expenses_list.dart';
 import 'package:expense_tracker/widgets/add_expense.dart';
 import 'package:expense_tracker/widgets/expenses_summary.dart';
@@ -14,83 +15,57 @@ class Expenses extends StatefulWidget {
 }
 
 class _ExpensesState extends State<Expenses> {
-
-  final List<Expense> _registeredExpenses = [
-    Expense(
-      title: 'Flutter course',
-      amount: 60.00,
-      date: DateTime.now(),
-      category: Category.work,
-    ),
-    Expense(
-      title: 'Cinema',
-      amount: 15.50,
-      date: DateTime.now(),
-      category: Category.leisure,
-    ),
-    Expense(
-      title: 'Transport',
-      amount: 10.00,
-      date: DateTime.now(),
-      category: Category.travel,
-    ),
-    Expense(
-      title: 'Food',
-      amount: 30.00,
-      date: DateTime.now(),
-      category: Category.food,
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    // Initialize expenses from Firebase
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ExpenseProvider>().initializeExpenses();
+    });
+  }
 
   void _openAddExpenseOverlay() {
     showModalBottomSheet(
       useSafeArea: true,
       isScrollControlled: true,
       context: context,
-      builder: (ctx) => AddExpense(onAddExpense: _addExpense),
+      builder: (ctx) => AddExpense(),
     );
-  }
-
-  void _addExpense(Expense expense) {
-    setState(() {
-      _registeredExpenses.add(expense);
-    });
   }
 
   void _removeExpense(Expense expense) {
-    final expenseIndex = _registeredExpenses.indexOf(expense);
-    setState(() {
-      _registeredExpenses.remove(expense);
-    });
-
+    final expenseProvider = context.read<ExpenseProvider>();
+    final isFromFirebase = expenseProvider.isFirebaseExpense(expense);
+    final expenseIndex = expenseProvider.expenses.indexOf(expense);
     
+    // Remove the expense
+    expenseProvider.removeExpense(expense);
     
-    // Show SnackBar with undo functionality
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${expense.title} deleted'),
-        duration: const Duration(seconds: 3),
-        action: SnackBarAction(
-          label: 'Undo',
-          onPressed: () {
-            _addExpenseBack(expense, expenseIndex);
-          },
+    // Show SnackBar with undo functionality (only for local expenses)
+    if (!isFromFirebase) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${expense.title} deleted'),
+          duration: const Duration(seconds: 3),
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () {
+              expenseProvider.addExpenseBack(expense, expenseIndex);
+            },
+          ),
         ),
-      ),
-    );
-  }
-
-  void _addExpenseBack(Expense expense, int originalIndex) {
-    setState(() {
-      // Insert at the original position, but clamp to valid range
-      final insertIndex = originalIndex.clamp(0, _registeredExpenses.length);
-      _registeredExpenses.insert(insertIndex, expense);
-    });
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${expense.title} deleted'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   void _clearAllExpenses() {
-    if (_registeredExpenses.isEmpty) return;
-    
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -103,9 +78,7 @@ class _ExpensesState extends State<Expenses> {
           ),
           TextButton(
             onPressed: () {
-              setState(() {
-                _registeredExpenses.clear();
-              });
+              context.read<ExpenseProvider>().clearAllExpenses();
               Navigator.of(ctx).pop();
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -140,45 +113,80 @@ class _ExpensesState extends State<Expenses> {
               );
             },
           ),
-          if (_registeredExpenses.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.delete_forever),
-              onPressed: _clearAllExpenses,
-              tooltip: 'Clear All Expenses',
-            ),
+          Consumer<ExpenseProvider>(
+            builder: (context, expenseProvider, child) {
+              return IconButton(
+                icon: Icon(expenseProvider.isLoading ? Icons.refresh : Icons.refresh),
+                onPressed: expenseProvider.isLoading ? null : () => expenseProvider.fetchExpenses(),
+                tooltip: 'Refresh Expenses',
+              );
+            },
+          ),
+          Consumer<ExpenseProvider>(
+            builder: (context, expenseProvider, child) {
+              return expenseProvider.hasExpenses
+                  ? IconButton(
+                      icon: const Icon(Icons.delete_forever),
+                      onPressed: _clearAllExpenses,
+                      tooltip: 'Clear All Expenses',
+                    )
+                  : const SizedBox.shrink();
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: _openAddExpenseOverlay,
           ),
         ],
       ),
-      body: 
-      width < 600 ? Column(
-        children: [
-          // Integrated Expenses Summary with Chart
-          ExpensesSummary(expenses: _registeredExpenses),
-          Expanded(
-            child: ExpensesList(
-              expenses: _registeredExpenses,
-              onRemoveExpense: _removeExpense,
-            ),
-          ),
-        ],
-      ) 
-      : Row(
-        children: [
-              Expanded(
-                child: ExpensesSummary(expenses: _registeredExpenses),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: ExpensesList(
-                  expenses: _registeredExpenses,
-                  onRemoveExpense: _removeExpense,
+      body: Consumer<ExpenseProvider>(
+        builder: (context, expenseProvider, child) {
+          // Show error if any
+          if (expenseProvider.error != null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(expenseProvider.error!),
+                  backgroundColor: Colors.red,
                 ),
-              ),
-            ],
-          ),
+              );
+            });
+          }
+
+          // Show loading indicator only when loading and no expenses
+          if (expenseProvider.isLoading && !expenseProvider.hasExpenses) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          // Main content
+          return width < 600 
+              ? Column(
+                  children: [
+                    ExpensesSummary(expenses: expenseProvider.expenses),
+                    Expanded(
+                      child: ExpensesList(
+                        expenses: expenseProvider.expenses,
+                        onRemoveExpense: _removeExpense,
+                      ),
+                    ),
+                  ],
+                ) 
+              : Row(
+                  children: [
+                    Expanded(
+                      child: ExpensesSummary(expenses: expenseProvider.expenses),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: ExpensesList(
+                        expenses: expenseProvider.expenses,
+                        onRemoveExpense: _removeExpense,
+                      ),
+                    ),
+                  ],
+                );
+        },
+      ),
     );
   }
 }

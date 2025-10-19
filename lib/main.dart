@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:expense_tracker/providers/theme_provider.dart';
+import 'package:expense_tracker/providers/expense_provider.dart';
 import 'package:expense_tracker/themes/app_themes.dart';
 import 'package:expense_tracker/widgets/expenses.dart';
 
 void main() {
   runApp(
-    ChangeNotifierProvider(
-      create: (context) => ThemeProvider(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => ThemeProvider()),
+        ChangeNotifierProvider(create: (context) => ExpenseProvider()),
+      ],
       child: const ExpenseTrackerApp(),
     ),
   );
